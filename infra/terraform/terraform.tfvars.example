@@ -1,0 +1,16 @@
+location            = "eastus"
+resource_group_name = "rg-event-ingestor-prod"
+cluster_name        = "aks-ingestor-prod"
+acr_name            = "acringestorprod123" # Must be unique
+node_count          = 2
+vm_size             = "Standard_B2s"
+
+app_env = {
+  HTTP_PORT         = "8080"
+  LOG_LEVEL         = "INFO"
+  KAFKA_BROKERS     = "pkc-1234.us-east-1.aws.confluent.cloud:9092" # External Kafka
+  KAFKA_TOPIC       = "production-events"
+  KAFKA_DLQ_TOPIC   = "production-events-dlq"
+  WORKER_POOL_SIZE  = "20"
+  RATE_LIMIT_RPS    = "5000"
+}
