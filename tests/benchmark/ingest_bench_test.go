@@ -12,8 +12,6 @@ import (
 	"github.com/raphaelreis/go-event-ingestor/internal/model"
 )
 
-// NoOpProducer implements kafka.Producer but does nothing,
-// allowing us to benchmark the Service queuing and worker overhead.
 type NoOpProducer struct{}
 
 func (p *NoOpProducer) Publish(ctx context.Context, event model.Event) error {
@@ -22,12 +20,10 @@ func (p *NoOpProducer) Publish(ctx context.Context, event model.Event) error {
 func (p *NoOpProducer) Close() error { return nil }
 
 func BenchmarkIngestService(b *testing.B) {
-	// Setup
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	mets := metrics.New()
 	producer := &NoOpProducer{}
-	
-	// Create service with ample buffer to test throughput
+
 	svc := ingest.NewService(10000, 10, producer, logger, mets)
 	defer svc.Shutdown()
 

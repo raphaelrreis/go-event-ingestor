@@ -18,7 +18,6 @@ import (
 func TestKafkaIntegration(t *testing.T) {
 	ctx := context.Background()
 
-	// 1. Start Kafka Container
 	kafkaContainer, err := tcKafka.Run(ctx,
 		"confluentinc/cp-kafka:7.6.1",
 		tcKafka.WithClusterID("test-cluster"),
@@ -30,16 +29,13 @@ func TestKafkaIntegration(t *testing.T) {
 		}
 	}()
 
-	// Get brokers
 	brokers, err := kafkaContainer.Brokers(ctx)
 	require.NoError(t, err)
 	t.Logf("Kafka started at: %v", brokers)
 
-	// 2. Setup Test Data
 	topic := "test-events"
 	dlqTopic := "test-events-dlq"
 
-	// Create Producer using our application code
 	producer := kafka.NewProducer(
 		brokers,
 		topic,
@@ -48,7 +44,6 @@ func TestKafkaIntegration(t *testing.T) {
 	)
 	defer producer.Close()
 
-	// 3. Publish Event
 	event := model.Event{
 		ID:        "evt-123",
 		Type:      "test-type",
@@ -59,8 +54,6 @@ func TestKafkaIntegration(t *testing.T) {
 	err = producer.Publish(ctx, event)
 	assert.NoError(t, err)
 
-	// 4. Consume Verification
-	// We use a raw kafka-go reader to verify the message actually landed in Kafka
 	reader := kafkaGo.NewReader(kafkaGo.ReaderConfig{
 		Brokers:   brokers,
 		Topic:     topic,
@@ -69,14 +62,12 @@ func TestKafkaIntegration(t *testing.T) {
 	})
 	defer reader.Close()
 
-	// Attempt to read the message with a timeout
 	ctxRead, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	m, err := reader.ReadMessage(ctxRead)
 	assert.NoError(t, err)
 
-	// 5. Assertions
 	assert.Equal(t, event.ID, string(m.Key))
 	assert.Contains(t, string(m.Value), "test-type")
 	assert.Contains(t, string(m.Value), "foo")
