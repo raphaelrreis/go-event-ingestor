@@ -7,7 +7,7 @@ DOCKER_IMAGE=go-event-ingestor
 DOCKER_TAG=latest
 GO=go
 
-.PHONY: help tidy build run test test-int bench lint docker-build docker-run clean
+.PHONY: help tidy fmt build run test test-int bench lint ci docker-build docker-run clean
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -18,8 +18,11 @@ help: ## Show this help message
 tidy: ## Run go mod tidy
 	$(GO) mod tidy
 
+fmt: ## Run go fmt
+	$(GO) fmt ./...
+
 build: ## Build the binary
-	$(GO) build -o $(BINARY_NAME) cmd/ingestor/main.go
+	$(GO) build -v -o $(BINARY_NAME) cmd/ingestor/main.go
 
 run: build ## Run the application locally
 	./$(BINARY_NAME)
@@ -27,25 +30,23 @@ run: build ## Run the application locally
 test: ## Run unit tests
 	$(GO) test -v -race ./...
 
-test-int: ## Run integration tests
+test-int: ## Run integration tests (requires Docker)
 	$(GO) test -v -tags=integration ./tests/integration/...
 
 bench: ## Run benchmarks
 	$(GO) test -bench=. ./tests/benchmark/...
 
-lint: ## Run linters (go vet + golangci-lint if installed)
+lint: ## Run linters (go vet + golangci-lint)
 	$(GO) vet ./...
-	@if command -v golangci-lint > /dev/null; then \
-		golangci-lint run; \
-	else \
-		echo "golangci-lint not found, skipping"; \
-	fi
+	golangci-lint run
 
 docker-build: ## Build Docker image
 	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
 
 docker-run: ## Run Docker container
 	docker run -p 8080:8080 --env-file .env $(DOCKER_IMAGE):$(DOCKER_TAG)
+
+ci: tidy fmt lint test test-int build docker-build ## Run full CI pipeline locally
 
 clean: ## Clean build artifacts
 	rm -f $(BINARY_NAME)

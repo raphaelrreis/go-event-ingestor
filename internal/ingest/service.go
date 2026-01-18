@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/raphaelreis/go-event-ingestor/internal/kafka"
 	"github.com/raphaelreis/go-event-ingestor/internal/metrics"
 	"github.com/raphaelreis/go-event-ingestor/internal/model"
-	"github.com/raphaelreis/go-event-ingestor/internal/kafka"
 )
 
 var (

@@ -7,7 +7,7 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
+  validate:
     name: Build and Validate
     runs-on: ubuntu-latest
     steps:
@@ -20,23 +20,8 @@ jobs:
           go-version: '1.23'
           cache: true
 
-      - name: Install Dependencies
-        run: go mod download
+      - name: Install golangci-lint
+        run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.59.0
 
-      - name: Lint
-        uses: golangci/golangci-lint-action@v3
-        with:
-          version: latest
-          args: --timeout=5m
-
-      - name: Run Unit Tests
-        run: go test -v -race ./...
-
-      - name: Run Integration Tests
-        run: go test -v -tags=integration ./tests/integration/...
-
-      - name: Build Binary
-        run: go build -v ./...
-
-      - name: Build Docker Image
-        run: docker build -t go-event-ingestor:test .
+      - name: Execute Full CI Pipeline
+        run: make ci

@@ -11,6 +11,37 @@ This project demonstrates a production-grade **Infrastructure as Code (IaC)** se
 - Kafka Producer (Main Topic + DLQ)
 - Prometheus Metrics
 
+## 🔄 Professional Workflow (CI/CD)
+
+We enforce a strict **"Local == CI"** policy.
+GitHub Actions runs the **exact same command** you should run locally before pushing.
+
+### 1. The Golden Rule
+**NEVER push code without running:**
+```bash
+make ci
+```
+
+### 2. What `make ci` does
+It runs the full validation pipeline in order:
+1.  `go mod tidy` (Dependency cleanup)
+2.  `go fmt` (Code formatting)
+3.  `golangci-lint` (Strict linting)
+4.  `go test` (Unit tests with race detection)
+5.  `go test -tags=integration` (Integration tests with Docker)
+6.  `go build` (Binary compilation)
+7.  `docker build` (Container packaging)
+
+If **ANY** step fails, the pipeline aborts immediately.
+
+### 3. Pre-Commit Hook (Recommended)
+To prevent accidental bad commits, set up a git hook:
+
+```bash
+echo "#!/bin/sh\nmake ci" > .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
 ## 🏗 Architecture
 
 ### Generic Application Layer (Kubernetes)

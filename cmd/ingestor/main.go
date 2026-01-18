@@ -52,7 +52,9 @@ func main() {
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			log.Error("Failed to write health response", "error", err)
+		}
 	})
 
 	srv := &http.Server{

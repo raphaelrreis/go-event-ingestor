@@ -70,7 +70,9 @@ func (h *Handler) Ingest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Request-ID", event.ID)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
-	json.NewEncoder(w).Encode(map[string]string{"status": "accepted", "id": event.ID})
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "accepted", "id": event.ID}); err != nil {
+		h.logger.Error("Failed to write response", "error", err, "event_id", event.ID)
+	}
 
 	h.logger.Debug("Request processed",
 		"duration_ms", time.Since(start).Milliseconds(),
