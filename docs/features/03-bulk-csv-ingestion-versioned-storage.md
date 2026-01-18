@@ -113,10 +113,13 @@ We introduce a lightweight JSON manifest: `_current.json`.
 }
 ```
 
-### 5.2 Mechanics
-- **Writing**: When a customer upload completes and passes validation, the system atomically updates `_current.json`.
+### 5.2 Mechanics & Safety
+- **Validation Barrier**: The `_current.json` is ONLY written after:
+    1.  The CSV upload is fully completed.
+    2.  Checksum (SHA256) is validated.
+    3.  Schema validation passes (header check).
+- **Atomic Swap**: The manifest update is an atomic overwrite (PUT).
 - **Reading**: The ingestion service reads `_current.json` to find the target file path.
-- **Safety**: Updating the manifest is the "commit" operation. The old files are safely ignored but preserved.
 
 ---
 
@@ -160,14 +163,28 @@ We do NOT rely on S3 metadata or file renaming to track progress. We use a dedic
 - **Resumability**: If the pod crashes at row 5,000,000, the new pod reads `last_offset` from DB and seeks to that position in the CSV stream.
 - **Deduplication**: Before starting, the system checks: *Has this file path already been successfully ingested?*
 
+### 7.3 Concurrency Control (Logical Lock)
+To prevent race conditions where two jobs try to process the same dataset period simultaneously:
+- The State Store enforces **one active ingestion job per (customer_id, dataset, period)**.
+- **Mechanism**: Unique constraint `UNIQUE(customer_id, dataset, period)` in DB or Advisory Lock.
+- **Outcome**: Avoids double ingestion and checkpoint corruption.
+
 ---
 
 ## 8. Failure & Recovery Model
 
 ### 8.1 Processing Semantics
-**At-Least-Once Delivery**: We guarantee all rows reach Kafka. In a crash/resume scenario, a small window of rows might be re-published. Downstream consumers must handle idempotency.
+**At-Least-Once Delivery**: We guarantee all rows reach Kafka. In a crash/resume scenario, a small window of rows might be re-published.
 
-### 8.2 Failure Scenarios
+### 8.2 Idempotency Key
+To support safe re-processing and deduplication downstream, every Kafka message includes metadata headers:
+- `ingest_job_id`
+- `ingest_file_path`
+- `ingest_row_number`
+
+Downstream consumers can use `(job_id, row_number)` as an idempotency key.
+
+### 8.3 Failure Scenarios
 1.  **Bad CSV Row**:
     - Log error details.
     - Increment `csv_parsing_errors` metric.
@@ -196,6 +213,9 @@ Terraform manages the **Container** (Buckets), not the **Content** (Files).
 - **IAM Policies**: Granting the Go App `GetObject` permission.
 - **Server-Side Encryption**: Enabling KMS.
 
+### ℹ️ Bucket Versioning
+**Note**: Native bucket versioning (S3 Versioning) is **OPTIONAL** and generally not required for this design, as we handle logical versioning explicitly via the path structure (`year=...`).
+
 ### ❌ Application Scope
 - Uploading the actual CSV files.
 - Generating the `year=...` directory structure.
@@ -203,7 +223,18 @@ Terraform manages the **Container** (Buckets), not the **Content** (Files).
 
 ---
 
-## 10. Non-Goals
+## 10. Security & Compliance
+
+To ensure enterprise-grade security:
+
+1.  **Encryption at Rest**: All buckets enabled with Server-Side Encryption (SSE-S3 or SSE-KMS).
+2.  **Encryption in Transit**: All uploads/downloads enforce TLS 1.2+.
+3.  **Least Privilege**: The ingestion service has read-only access to historical folders and read-write access only to `_current.json` and active folders if necessary (though ideally uploads are separated from ingestion).
+4.  **PII/Logs**: Application logs must NOT output raw CSV row data containing PII. Only row numbers and error codes are logged.
+
+---
+
+## 11. Non-Goals
 
 - **Real-time Streaming**: This is a batch system. Latency is minutes/hours, not milliseconds.
 - **Data Editing**: We do not support "updating row 50" inside a CSV. Upload a new file instead.
@@ -211,7 +242,7 @@ Terraform manages the **Container** (Buckets), not the **Content** (Files).
 
 ---
 
-## 11. Architecture Summary
+## 12. Architecture Summary
 
 ```ascii
 [Client] 
@@ -226,7 +257,8 @@ Terraform manages the **Container** (Buckets), not the **Content** (Files).
 [Ingestion Service (Go)]
    | (1) Read Manifest
    | (2) Stream Active CSV
-   | (3) Checkpoint to DB
+   | (3) Checkpoint to DB (Lock: customer+period)
    v
 [Kafka] -> [Downstream Consumers]
+            (Header: job_id, row_num)
 ```
