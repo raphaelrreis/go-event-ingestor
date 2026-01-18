@@ -14,6 +14,8 @@ This service acts as a gateway for ingesting high-volume events via HTTP and rel
 - **Rate Limiting**: Token bucket rate limiter to protect downstream systems.
 - **Observability**: Prometheus metrics and structured JSON logging (`log/slog`).
 - **Graceful Shutdown**: Ensures in-flight requests and buffered events are processed before exiting.
+- **Docker Compose**: Ready-to-use local environment with Kafka and Prometheus.
+- **Integration Tests**: Real Kafka testing via Testcontainers.
 
 ## 🏗 Architecture
 
@@ -41,8 +43,10 @@ This service acts as a gateway for ingesting high-volume events via HTTP and rel
 ├── pkg/
 │   └── logger/         # Structured logger setup
 ├── tests/              # Integration and benchmarks
+├── .github/workflows   # CI Pipelines
 ├── Dockerfile          # Multi-stage Docker build
 ├── Makefile            # Build and maintenance commands
+├── docker-compose.yml  # Local dev stack (Kafka + Prometheus)
 └── go.mod              # Go module definition
 ```
 
@@ -51,8 +55,7 @@ This service acts as a gateway for ingesting high-volume events via HTTP and rel
 ### Prerequisites
 
 - Go 1.23+
-- Docker & Docker Compose (optional, for dependencies)
-- A running Kafka instance
+- Docker & Docker Compose
 
 ### Configuration
 
@@ -70,14 +73,16 @@ The application is configured via environment variables.
 | `RATE_LIMIT_RPS` | 1000 | Requests per second limit |
 | `RATE_LIMIT_BURST` | 100 | Burst size for rate limiter |
 
-### Running Locally
+### Running Locally (with Docker Compose)
 
-1.  **Install dependencies**:
+The easiest way to run the full stack (App + Kafka + Prometheus):
+
+1.  **Start dependencies**:
     ```bash
-    make tidy
+    docker-compose up -d
     ```
 
-2.  **Build and Run**:
+2.  **Run the application**:
     ```bash
     make run
     ```
@@ -89,29 +94,36 @@ The application is configured via environment variables.
       -d '{"type": "click", "payload": {"user_id": 123}}'
     ```
 
-### Running with Docker
+4.  **Check Metrics**:
+    Open Prometheus at `http://localhost:9090` and query `events_received_total`.
+
+### Running Integration Tests
+
+We use [Testcontainers](https://testcontainers.com/) to spin up a real Kafka instance for testing.
+Ensure Docker is running.
 
 ```bash
-make docker-build
-make docker-run
+make test-int
 ```
 
-## 📊 Observability
+## 📈 Benchmarks
 
-### Metrics
+We use Go\'s standard benchmarking tools to measure internal throughput and allocation overhead.
 
-The service exposes Prometheus metrics at `/metrics`.
+Run benchmarks locally:
+```bash
+make bench
+```
 
-- `events_received_total`: Total events accepted via HTTP.
-- `events_published_total`: Events successfully sent to Kafka.
-- `events_failed_total`: Events failed (sent to DLQ or dropped).
-- `ingest_queue_size`: Current usage of the internal buffer.
-- `ingest_latency_ms`: Histogram of end-to-end processing time.
-- `http_requests_total`: HTTP request counts by status code.
+**Reference Results (Apple M1 Pro):**
+- **Throughput**: ~1.67 Million ops/sec
+- **Latency**: ~597 ns/op (Internal queuing overhead)
 
-### Logging
+```text
+BenchmarkIngestService-10    2092281    597.4 ns/op    255 B/op    3 allocs/op
+```
 
-Logs are written to `stdout` in JSON format for easy integration with ELK/Splunk.
+*Note: This benchmarks the service layer queuing and worker dispatch. End-to-end throughput will be bound by Kafka network I/O.*
 
 ## ⚖️ Trade-offs
 
