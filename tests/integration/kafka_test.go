@@ -4,6 +4,8 @@ package integration
 
 import (
 	"context"
+	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -35,6 +37,26 @@ func TestKafkaIntegration(t *testing.T) {
 
 	topic := "test-events"
 	dlqTopic := "test-events-dlq"
+
+	// Create topics explicitly to ensure they exist
+	conn, err := kafkaGo.Dial("tcp", brokers[0])
+	require.NoError(t, err)
+	defer conn.Close()
+
+	controller, err := conn.Controller()
+	require.NoError(t, err)
+	var controllerConn *kafkaGo.Conn
+	controllerConn, err = kafkaGo.Dial("tcp", net.JoinHostPort(controller.Host, strconv.Itoa(controller.Port)))
+	require.NoError(t, err)
+	defer controllerConn.Close()
+
+	topicConfigs := []kafkaGo.TopicConfig{
+		{Topic: topic, NumPartitions: 1, ReplicationFactor: 1},
+		{Topic: dlqTopic, NumPartitions: 1, ReplicationFactor: 1},
+	}
+
+	err = controllerConn.CreateTopics(topicConfigs...)
+	require.NoError(t, err)
 
 	producer := kafka.NewProducer(
 		brokers,
