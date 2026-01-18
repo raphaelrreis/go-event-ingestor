@@ -5,7 +5,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// Metrics holds the Prometheus collectors.
 type Metrics struct {
 	EventsReceived  prometheus.Counter
 	EventsPublished prometheus.Counter
@@ -15,7 +14,6 @@ type Metrics struct {
 	HTTPRequests    *prometheus.CounterVec
 }
 
-// New initializes and registers the metrics.
 func New() *Metrics {
 	return &Metrics{
 		EventsReceived: promauto.NewCounter(prometheus.CounterOpts{
@@ -37,7 +35,7 @@ func New() *Metrics {
 		IngestLatency: promauto.NewHistogram(prometheus.HistogramOpts{
 			Name:    "ingest_latency_ms",
 			Help:    "Latency of event processing from ingestion to publish",
-			Buckets: prometheus.ExponentialBuckets(1, 2, 10), // 1ms, 2ms, 4ms, ...
+			Buckets: prometheus.ExponentialBuckets(1, 2, 10),
 		}),
 		HTTPRequests: promauto.NewCounterVec(prometheus.CounterOpts{
 			Name: "http_requests_total",

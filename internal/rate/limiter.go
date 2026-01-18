@@ -4,7 +4,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// Limiter defines the rate limiting interface.
 type Limiter interface {
 	Allow() bool
 }

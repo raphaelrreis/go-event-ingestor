@@ -5,8 +5,6 @@ import (
 	"os"
 )
 
-// New creates a new structured logger instance.
-// It defaults to JSON format for production readiness.
 func New(level string) *slog.Logger {
 	var logLevel slog.Level
 	switch level {

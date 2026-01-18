@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,16 +19,13 @@ import (
 )
 
 func main() {
-	// 1. Config & Logger
 	cfg := config.LoadFromEnv()
 	log := logger.New(cfg.LogLevel)
-	
+
 	log.Info("Starting Event Ingestor", "config", cfg)
 
-	// 2. Infrastructure
 	mets := metrics.New()
-	
-	// Kafka Producer
+
 	producer := kafka.NewProducer(
 		cfg.KafkaBrokers,
 		cfg.KafkaTopic,
@@ -38,7 +34,6 @@ func main() {
 	)
 	defer producer.Close()
 
-	// 3. Service Layer
 	svc := ingest.NewService(
 		cfg.QueueSize,
 		cfg.WorkerPoolSize,
@@ -48,15 +43,13 @@ func main() {
 	)
 	defer svc.Shutdown()
 
-	// 4. HTTP Layer
 	limiter := rate.NewTokenLimiter(cfg.RateLimitRPS, cfg.RateLimitBurst)
 	handler := internalHttp.NewHandler(svc, limiter, log, mets)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/events", handler.Ingest)
 	mux.Handle("/metrics", promhttp.Handler())
-	
-	// Health check
+
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
@@ -70,7 +63,6 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	// 5. Start Server
 	go func() {
 		log.Info("Server listening", "port", cfg.HTTPPort)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -79,7 +71,6 @@ func main() {
 		}
 	}()
 
-	// 6. Graceful Shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
