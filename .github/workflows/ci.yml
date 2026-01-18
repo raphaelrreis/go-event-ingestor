@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build and Test
+    name: Build and Validate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -34,8 +34,9 @@ jobs:
 
       - name: Run Integration Tests
         run: go test -v -tags=integration ./tests/integration/...
-        # GitHub Actions ubuntu-latest has Docker pre-installed,
-        # so testcontainers-go works out of the box.
 
-      - name: Build
+      - name: Build Binary
         run: go build -v ./...
+
+      - name: Build Docker Image
+        run: docker build -t go-event-ingestor:test .

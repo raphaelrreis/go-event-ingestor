@@ -1,136 +1,103 @@
-# Go Event Ingestor
+# Go Event Ingestor (Multi-Cloud)
 
-High-performance, fault-tolerant HTTP-to-Kafka event ingestion service written in Go.
+A high-performance, stateless HTTP event ingestion service designed for Multi-Cloud deployments (AWS, GCP, Azure).
 
 ## 🚀 Overview
 
-This service acts as a gateway for ingesting high-volume events via HTTP and reliably publishing them to Apache Kafka. It is designed to handle backpressure, graceful degradation, and production-grade observability.
+This project demonstrates a production-grade **Infrastructure as Code (IaC)** setup for deploying a Go application to three major cloud providers using **Terraform**. The application logic remains identical; only the infrastructure layer adapts to the specific cloud provider.
 
-### Key Features
-
-- **High Throughput**: Uses worker pools and batching for efficient Kafka writes.
-- **Fault Tolerance**: Implements a Dead Letter Queue (DLQ) for failed messages.
-- **Backpressure**: Rejects requests (HTTP 503) when internal buffers are full to prevent OOM.
-- **Rate Limiting**: Token bucket rate limiter to protect downstream systems.
-- **Observability**: Prometheus metrics and structured JSON logging (`log/slog`).
-- **Graceful Shutdown**: Ensures in-flight requests and buffered events are processed before exiting.
-- **Docker Compose**: Ready-to-use local environment with Kafka and Prometheus.
-- **Integration Tests**: Real Kafka testing via Testcontainers.
+**Core Application:**
+- HTTP API (POST /events)
+- Kafka Producer (Main Topic + DLQ)
+- Prometheus Metrics
 
 ## 🏗 Architecture
 
-1.  **HTTP Layer**: Receives JSON events, validates payload, and enforces rate limits.
-2.  **Ingestion Service**: Buffers events in a bounded channel.
-3.  **Worker Pool**: Multiple concurrent workers consume the channel and publish to Kafka.
-4.  **Kafka Producer**:
-    *   **Main Topic**: Primary destination for events.
-    *   **DLQ Topic**: Fallback for events that fail to publish after retries.
+### Generic Application Layer (Kubernetes)
+The application runs as a stateless Deployment on Kubernetes. We use a **Shared Terraform Module** (`infra/modules/k8s-app`) to define the K8s resources (Deployment, Service, Ingress) once and reuse them across EKS, GKE, and AKS.
 
-## 📂 Folder Structure
+### Cloud Specifics
+
+| Provider | Kubernetes | Registry | Network |
+|---|---|---|---|
+| **AWS** | EKS (Elastic Kubernetes Service) | ECR | VPC |
+| **GCP** | GKE (Google Kubernetes Engine) | Artifact Registry | VPC |
+| **Azure**| AKS (Azure Kubernetes Service) | ACR | VNet |
+
+## 📂 Project Structure
 
 ```
 .
-├── cmd/
-│   └── ingestor/       # Application entrypoint
-├── internal/
-│   ├── config/         # Configuration loading
-│   ├── http/           # HTTP handlers
-│   ├── ingest/         # Core business logic (worker pool)
-│   ├── kafka/          # Kafka producer wrapper
-│   ├── metrics/        # Prometheus metrics definition
-│   ├── model/          # Data models
-│   └── rate/           # Rate limiter implementation
-├── pkg/
-│   └── logger/         # Structured logger setup
-├── tests/              # Integration and benchmarks
-├── .github/workflows   # CI Pipelines
-├── Dockerfile          # Multi-stage Docker build
-├── Makefile            # Build and maintenance commands
+├── cmd/                # Go Application Entrypoint
+├── infra/
+│   ├── modules/
+│   │   └── k8s-app/    # Shared K8s Deployment Module (DRY)
+│   ├── aws/            # Terraform for AWS (EKS + ECR)
+│   ├── gcp/            # Terraform for GCP (GKE + GAR)
+│   └── azure/          # Terraform for Azure (AKS + ACR)
+├── tests/              # Integration tests
+├── Dockerfile          # Multi-stage build
 ├── docker-compose.yml  # Local dev stack (Kafka + Prometheus)
-└── go.mod              # Go module definition
+└── Makefile            # Commands
 ```
 
-## 🛠 Getting Started
-
-### Prerequisites
-
-- Go 1.23+
-- Docker & Docker Compose
-
-### Configuration
-
-The application is configured via environment variables.
-
-| Variable | Default | Description |
-|---|---|---|
-| `HTTP_PORT` | 8080 | Port to listen on |
-| `LOG_LEVEL` | INFO | Log level (DEBUG, INFO, WARN, ERROR) |
-| `KAFKA_BROKERS` | localhost:9092 | Comma-separated list of Kafka brokers |
-| `KAFKA_TOPIC` | events | Main Kafka topic |
-| `KAFKA_DLQ_TOPIC` | events-dlq | Dead Letter Queue topic |
-| `WORKER_POOL_SIZE` | 10 | Number of concurrent Kafka publishers |
-| `QUEUE_SIZE` | 1000 | Size of internal buffer channel |
-| `RATE_LIMIT_RPS` | 1000 | Requests per second limit |
-| `RATE_LIMIT_BURST` | 100 | Burst size for rate limiter |
-
-### Running Locally (with Docker Compose)
-
-The easiest way to run the full stack (App + Kafka + Prometheus):
+## 🛠 Local Development
 
 1.  **Start dependencies**:
     ```bash
     docker-compose up -d
     ```
-
-2.  **Run the application**:
+2.  **Run App**:
     ```bash
     make run
     ```
-
-3.  **Send a Test Event**:
+3.  **Test**:
     ```bash
-    curl -i -X POST http://localhost:8080/events \
-      -H "Content-Type: application/json" \
-      -d '{"type": "click", "payload": {"user_id": 123}}'
+    curl -X POST http://localhost:8080/events -d '{"type":"test"}'
     ```
 
-4.  **Check Metrics**:
-    Open Prometheus at `http://localhost:9090` and query `events_received_total`.
+## ☁️ Deployment Guide
 
-### Running Integration Tests
+### Prerequisites
+- Terraform >= 1.5
+- Cloud CLI (awscli, gcloud, az)
+- Docker
 
-We use [Testcontainers](https://testcontainers.com/) to spin up a real Kafka instance for testing.
-Ensure Docker is running.
-
+### 1. AWS Deployment
 ```bash
-make test-int
+cd infra/aws
+terraform init
+terraform apply -var="region=us-east-1"
+# Output provides ECR URL and kubectl config command
 ```
 
-## 📈 Benchmarks
-
-We use Go\'s standard benchmarking tools to measure internal throughput and allocation overhead.
-
-Run benchmarks locally:
+### 2. GCP Deployment
 ```bash
-make bench
+cd infra/gcp
+terraform init
+terraform apply -var="project_id=YOUR_PROJECT_ID"
+# Output provides GAR URL and gcloud credentials command
 ```
 
-**Reference Results (Apple M1 Pro):**
-- **Throughput**: ~1.67 Million ops/sec
-- **Latency**: ~597 ns/op (Internal queuing overhead)
-
-```text
-BenchmarkIngestService-10    2092281    597.4 ns/op    255 B/op    3 allocs/op
+### 3. Azure Deployment
+```bash
+cd infra/azure
+terraform init
+terraform apply
+# Output provides ACR URL and az aks credentials command
 ```
 
-*Note: This benchmarks the service layer queuing and worker dispatch. End-to-end throughput will be bound by Kafka network I/O.*
+## 🧠 Design Decisions & Trade-offs
 
-## ⚖️ Trade-offs
+1.  **Shared Module vs. Cloud Specifics**:
+    - We abstracted the *application* deployment into `infra/modules/k8s-app` because Kubernetes manifests are cloud-agnostic.
+    - We kept network and cluster creation specific (`infra/aws`, `infra/azure`) because trying to abstract VPCs vs VNets leads to leaky abstractions and over-engineering.
 
-- **Channel-based Buffer**: We use an in-memory channel. If the pod crashes hard, buffered events are lost. For zero-data-loss requirements, a persistent write-ahead log (WAL) or direct-to-Kafka (synchronous) mode would be needed, at the cost of latency.
-- **At-least-once Delivery**: In rare failure scenarios (network partition during ack), duplicates might occur in Kafka. Downstream consumers should be idempotent.
-- **No TLS Config**: Currently disabled for simplicity. Production deployment should enable TLS/SASL in `internal/kafka/producer.go`.
+2.  **External Kafka**:
+    - This project does *not* provision Kafka via Terraform to keep costs and complexity manageable. In a real scenario, you would use AWS MSK, Confluent Cloud, or Azure Event Hubs and pass the connection string via `app_env` variables in Terraform.
+
+3.  **State Management**:
+    - Local state is used for simplicity. In production, use S3/GCS/Azure Storage backends.
 
 ## 📝 License
-
 MIT

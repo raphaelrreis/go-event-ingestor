@@ -15,5 +15,5 @@ output "get_credentials_command" {
 }
 
 output "application_public_ip" {
-  value = try(kubernetes_service.ingestor.status.0.load_balancer.0.ingress.0.ip, "Pending (Run 'kubectl get svc -n ${var.kubernetes_namespace}' later)")
+  value = module.app.service_ip
 }

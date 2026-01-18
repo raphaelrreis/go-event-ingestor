@@ -1,49 +1,53 @@
-resource "kubernetes_namespace" "app" {
-  metadata {
-    name = var.kubernetes_namespace
+terraform {
+  required_providers {
+    kubernetes = {
+      source = "hashicorp/kubernetes"
+    }
   }
-  
-  # Ensure AKS is ready before trying to create namespaces
-  depends_on = [azurerm_kubernetes_cluster.aks]
 }
 
-resource "kubernetes_deployment" "ingestor" {
+resource "kubernetes_namespace" "app" {
   metadata {
-    name      = "go-event-ingestor"
+    name = var.namespace
+  }
+}
+
+resource "kubernetes_deployment" "app" {
+  metadata {
+    name      = var.app_name
     namespace = kubernetes_namespace.app.metadata.0.name
     labels = {
-      app = "event-ingestor"
+      app = var.app_name
     }
   }
 
   spec {
-    replicas = var.app_replicas
+    replicas = var.replicas
 
     selector {
       match_labels = {
-        app = "event-ingestor"
+        app = var.app_name
       }
     }
 
     template {
       metadata {
         labels = {
-          app = "event-ingestor"
+          app = var.app_name
         }
       }
 
       spec {
         container {
-          image = "${azurerm_container_registry.acr.login_server}/${var.image_repository}:${var.image_tag}"
-          name  = "ingestor"
+          image = var.image
+          name  = var.app_name
 
           port {
-            container_port = 8080
+            container_port = var.port
           }
 
-          # Inject environment variables from the Terraform map variable
           dynamic "env" {
-            for_each = var.app_env
+            for_each = var.env_vars
             content {
               name  = env.key
               value = env.value
@@ -64,7 +68,7 @@ resource "kubernetes_deployment" "ingestor" {
           liveness_probe {
             http_get {
               path = "/health"
-              port = 8080
+              port = var.port
             }
             initial_delay_seconds = 5
             period_seconds        = 10
@@ -73,7 +77,7 @@ resource "kubernetes_deployment" "ingestor" {
           readiness_probe {
             http_get {
               path = "/health"
-              port = 8080
+              port = var.port
             }
             initial_delay_seconds = 5
             period_seconds        = 10
@@ -84,20 +88,20 @@ resource "kubernetes_deployment" "ingestor" {
   }
 }
 
-resource "kubernetes_service" "ingestor" {
+resource "kubernetes_service" "app" {
   metadata {
-    name      = "go-event-ingestor"
+    name      = var.app_name
     namespace = kubernetes_namespace.app.metadata.0.name
   }
 
   spec {
     selector = {
-      app = "event-ingestor"
+      app = var.app_name
     }
 
     port {
       port        = 80
-      target_port = 8080
+      target_port = var.port
     }
 
     type = "LoadBalancer"
